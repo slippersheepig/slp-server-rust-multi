@@ -29,6 +29,14 @@ jobs:
             rust_image: ghcr.io/rust-cross/rust-musl-cross:armv7-musleabi
             target_triple: armv7-unknown-linux-musleabi
             tag_suffix: armv7
+          - arch: ppc64le
+            rust_image: ghcr.io/rust-cross/rust-musl-cross:powerpc64le-musl
+            target_triple: powerpc64le-unknown-linux-musl
+            tag_suffix: ppc64le
+          - arch: riscv64
+            rust_image: ghcr.io/rust-cross/rust-musl-cross:riscv64gc-musl
+            target_triple: riscv64gc-unknown-linux-musl
+            tag_suffix: riscv64
     runs-on: ubuntu-latest
     name: Build and push for ${{ matrix.arch }}
     steps:
@@ -48,12 +56,26 @@ jobs:
           username: ${{ secrets.DOCKERHUB_USERNAME }}
           password: ${{ secrets.DOCKERHUB_TOKEN }}
 
-      - name: Build and push image for ${{ matrix.platform }}
+      - name: Build & push (with platforms) for ${{ matrix.arch }}
+        if: ${{ matrix.platform != '' }}
         uses: docker/build-push-action@v5
         with:
           context: .
           push: true
           platforms: ${{ matrix.platform }}
+          tags: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ matrix.tag_suffix }}
+          build-args: |
+            RUST_MUSL_IMAGE=${{ matrix.rust_image }}
+            TARGET_TRIPLE=${{ matrix.target_triple }}
+          labels: |
+            org.opencontainers.image.source=https://github.com/spacemeowx2/slp-server-rust
+
+      - name: Build & push (without platforms) for ${{ matrix.arch }}
+        if: ${{ matrix.platform == '' }}
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          push: true
           tags: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ matrix.tag_suffix }}
           build-args: |
             RUST_MUSL_IMAGE=${{ matrix.rust_image }}
@@ -83,5 +105,7 @@ jobs:
           docker buildx imagetools create --tag ${IMG}:latest \
             ${IMG}:amd64 \
             ${IMG}:arm64 \
-            ${IMG}:armv7
+            ${IMG}:armv7 \
+            ${IMG}:ppc64le \
+            ${IMG}:riscv64
           docker buildx imagetools inspect ${IMG}:latest --raw
