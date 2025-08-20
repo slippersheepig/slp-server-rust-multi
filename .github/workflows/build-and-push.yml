@@ -1,0 +1,85 @@
+name: build-and-push-multiarch-to-dockerhub
+
+on:
+  push:
+    branches: [ main ]
+  workflow_dispatch:
+
+env:
+  IMAGE_NAME: sheepgreen/slp-server-rust
+  REGISTRY: docker.io
+
+jobs:
+  build:
+    strategy:
+      matrix:
+        include:
+          - arch: amd64
+            platform: linux/amd64
+            rust_image: ghcr.io/rust-cross/rust-musl-cross:x86_64-musl
+            target_triple: x86_64-unknown-linux-musl
+            tag_suffix: amd64
+          - arch: arm64
+            platform: linux/arm64
+            rust_image: ghcr.io/rust-cross/rust-musl-cross:aarch64-musl
+            target_triple: aarch64-unknown-linux-musl
+            tag_suffix: arm64
+          - arch: armv7
+            platform: linux/arm/v7
+            rust_image: ghcr.io/rust-cross/rust-musl-cross:armv7-musleabi
+            target_triple: armv7-unknown-linux-musleabi
+            tag_suffix: armv7
+    runs-on: ubuntu-latest
+    name: Build and push for ${{ matrix.arch }}
+    steps:
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v3
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to Docker Hub
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+      - name: Build and push image for ${{ matrix.platform }}
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          push: true
+          platforms: ${{ matrix.platform }}
+          tags: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ matrix.tag_suffix }}
+          build-args: |
+            RUST_MUSL_IMAGE=${{ matrix.rust_image }}
+            TARGET_TRIPLE=${{ matrix.target_triple }}
+          labels: |
+            org.opencontainers.image.source=https://github.com/spacemeowx2/slp-server-rust
+
+  manifest:
+    name: Create and push multi-arch manifest
+    runs-on: ubuntu-latest
+    needs: build
+    steps:
+      - name: Install docker CLI
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends docker.io
+
+      - name: Log in to Docker Hub (for manifest push)
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+      - name: Create manifest and push :latest
+        run: |
+          IMG=${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
+          docker manifest create ${IMG}:latest \
+            ${IMG}:amd64 \
+            ${IMG}:arm64 \
+            ${IMG}:armv7
+          docker manifest push ${IMG}:latest
