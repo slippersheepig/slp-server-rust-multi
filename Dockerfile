@@ -5,8 +5,13 @@ ARG SRC_ARCHIVE_URL=https://github.com/spacemeowx2/slp-server-rust/archive/refs/
 FROM ${RUST_MUSL_IMAGE} AS builder
 WORKDIR /src
 
+ARG SRC_ARCHIVE_URL
+ARG TARGET_TRIPLE
+
 ADD ${SRC_ARCHIVE_URL} /tmp/src.tar.gz
-RUN tar -xzf /tmp/src.tar.gz -C /src --strip-components=1
+
+RUN mkdir -p /src && \
+    tar -xzf /tmp/src.tar.gz -C /src --strip-components=1
 
 ENV RUSTFLAGS="-C target-feature=+crt-static"
 
