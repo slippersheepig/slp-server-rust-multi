@@ -29,11 +29,6 @@ jobs:
             rust_image: ghcr.io/rust-cross/rust-musl-cross:armv7-musleabi
             target_triple: armv7-unknown-linux-musleabi
             tag_suffix: armv7
-          - arch: riscv64
-            platform: linux/riscv64
-            rust_image: ghcr.io/rust-cross/rust-musl-cross:riscv64gc-musl
-            target_triple: riscv64gc-unknown-linux-musl
-            tag_suffix: riscv64
     runs-on: ubuntu-latest
     name: Build and push for ${{ matrix.arch }}
     steps:
@@ -88,6 +83,5 @@ jobs:
           docker buildx imagetools create --tag ${IMG}:latest \
             ${IMG}:amd64 \
             ${IMG}:arm64 \
-            ${IMG}:armv7 \
-            ${IMG}:riscv64
+            ${IMG}:armv7
           docker buildx imagetools inspect ${IMG}:latest --raw
