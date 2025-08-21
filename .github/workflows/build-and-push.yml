@@ -153,7 +153,7 @@ jobs:
         shell: bash
         run: |
           set -eux
-          BASE="ghcr.io/${{ env.OWNER_LC }}/slp-server-rust"
+          BASE="ghcr.io/${{ env.OWNER_LC }}slp-server-rust"
           docker buildx imagetools create --tag "${BASE}:latest" \
             "${BASE}:amd64" "${BASE}:arm64" "${BASE}:armv7" "${BASE}:ppc64le"
           docker buildx imagetools inspect "${BASE}:latest" --raw
