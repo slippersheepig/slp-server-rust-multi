@@ -124,7 +124,9 @@ jobs:
         shell: bash
         run: |
           set -eux
-          BASE="docker.io/${{ env.DOCKERHUB_IMAGE }}"
+          OWNER_LC="${GITHUB_REPOSITORY_OWNER,,}"
+          BASE_IMAGE="${DOCKERHUB_IMAGE:-${OWNER_LC}/slp-server-rust}"
+          BASE="docker.io/${BASE_IMAGE}"
           docker buildx imagetools create --tag "${BASE}:latest" \
             "${BASE}:amd64" "${BASE}:arm64" "${BASE}:armv7"
           docker buildx imagetools inspect "${BASE}:latest" --raw
@@ -133,7 +135,8 @@ jobs:
         shell: bash
         run: |
           set -eux
-          BASE="${{ env.GHCR_IMAGE }}"
+          OWNER_LC="${GITHUB_REPOSITORY_OWNER,,}"
+          BASE="${GHCR_IMAGE:-ghcr.io/${OWNER_LC}/slp-server-rust}"
           docker buildx imagetools create --tag "${BASE}:latest" \
             "${BASE}:amd64" "${BASE}:arm64" "${BASE}:armv7"
           docker buildx imagetools inspect "${BASE}:latest" --raw
