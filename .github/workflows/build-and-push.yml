@@ -19,6 +19,8 @@ permissions:
 
 env:
   DOCKERHUB_IMAGE: sheepgreen/slp-server-rust
+  OWNER_LC: ${{ toLower(github.repository_owner) }}
+  GHCR_IMAGE: ghcr.io/${{ toLower(github.repository_owner) }}/slp-server-rust
 
 jobs:
   build:
@@ -42,10 +44,6 @@ jobs:
             target_triple: armv7-unknown-linux-musleabi
             rust_musl_image: ghcr.io/rust-cross/rust-musl-cross:armv7-musleabi
             suffix: armv7
-          - name: ppc64le
-            target_triple: powerpc64le-unknown-linux-musl
-            rust_musl_image: ghcr.io/rust-cross/rust-musl-cross:powerpc64le-musl
-            suffix: ppc64le
 
     steps:
       - name: Checkout
@@ -55,8 +53,6 @@ jobs:
         shell: bash
         run: |
           set -eux
-          OWNER_LC="${GITHUB_REPOSITORY_OWNER,,}"
-          echo "OWNER_LC=$OWNER_LC" >> $GITHUB_ENV
           if [ -n "${{ inputs.slp_commit || '' }}" ]; then
             echo "UPSTREAM_SHA=${{ inputs.slp_commit }}" >> $GITHUB_ENV
           fi
@@ -66,7 +62,6 @@ jobs:
             SRC_URL="https://github.com/spacemeowx2/slp-server-rust/archive/refs/heads/master.tar.gz"
           fi
           echo "SRC_ARCHIVE_URL=$SRC_URL" >> $GITHUB_ENV
-          echo "GHCR_IMAGE=ghcr.io/${OWNER_LC}/slp-server-rust" >> $GITHUB_ENV
 
       - name: Set up QEMU
         uses: docker/setup-qemu-action@v3
@@ -88,8 +83,7 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Build & push (with platforms) for ${{ matrix.arch }}
-        if: ${{ matrix.platform != '' }}
+      - name: Build & push for ${{ matrix.name }}
         uses: docker/build-push-action@v5
         with:
           context: .
@@ -102,22 +96,7 @@ jobs:
             SRC_ARCHIVE_URL=${{ env.SRC_ARCHIVE_URL }}
           tags: |
             docker.io/${{ env.DOCKERHUB_IMAGE }}:${{ matrix.suffix }}
-            ghcr.io/${{ env.OWNER_LC }}/slp-server-rust:${{ matrix.suffix }}
-
-      - name: Build & push (without platforms) for ${{ matrix.arch }}
-        if: ${{ matrix.platform == '' }}
-        uses: docker/build-push-action@v5
-        with:
-          context: .
-          push: true
-          provenance: false
-          build-args: |
-            RUST_MUSL_IMAGE=${{ matrix.rust_musl_image }}
-            TARGET_TRIPLE=${{ matrix.target_triple }}
-            SRC_ARCHIVE_URL=${{ env.SRC_ARCHIVE_URL }}
-          tags: |
-            docker.io/${{ env.DOCKERHUB_IMAGE }}:${{ matrix.suffix }}
-            ghcr.io/${{ env.OWNER_LC }}/slp-server-rust:${{ matrix.suffix }}
+            ${{ env.GHCR_IMAGE }}:${{ matrix.suffix }}
 
   manifest:
     needs: build
@@ -146,14 +125,14 @@ jobs:
           set -eux
           BASE="docker.io/${{ env.DOCKERHUB_IMAGE }}"
           docker buildx imagetools create --tag "${BASE}:latest" \
-            "${BASE}:amd64" "${BASE}:arm64" "${BASE}:armv7" "${BASE}:ppc64le"
+            "${BASE}:amd64" "${BASE}:arm64" "${BASE}:armv7"
           docker buildx imagetools inspect "${BASE}:latest" --raw
 
       - name: Create & push multi-arch manifests (GHCR)
         shell: bash
         run: |
           set -eux
-          BASE="ghcr.io/${{ env.OWNER_LC }}slp-server-rust"
+          BASE="${{ env.GHCR_IMAGE }}"
           docker buildx imagetools create --tag "${BASE}:latest" \
-            "${BASE}:amd64" "${BASE}:arm64" "${BASE}:armv7" "${BASE}:ppc64le"
+            "${BASE}:amd64" "${BASE}:arm64" "${BASE}:armv7"
           docker buildx imagetools inspect "${BASE}:latest" --raw
