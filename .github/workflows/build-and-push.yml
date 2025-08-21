@@ -19,8 +19,6 @@ permissions:
 
 env:
   DOCKERHUB_IMAGE: sheepgreen/slp-server-rust
-  OWNER_LC: ${{ toLower(github.repository_owner) }}
-  GHCR_IMAGE: ghcr.io/${{ toLower(github.repository_owner) }}/slp-server-rust
 
 jobs:
   build:
@@ -53,6 +51,9 @@ jobs:
         shell: bash
         run: |
           set -eux
+          OWNER_LC="${GITHUB_REPOSITORY_OWNER,,}"
+          echo "OWNER_LC=$OWNER_LC" >> $GITHUB_ENV
+          echo "GHCR_IMAGE=ghcr.io/${OWNER_LC}/slp-server-rust" >> $GITHUB_ENV
           if [ -n "${{ inputs.slp_commit || '' }}" ]; then
             echo "UPSTREAM_SHA=${{ inputs.slp_commit }}" >> $GITHUB_ENV
           fi
