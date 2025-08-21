@@ -1,43 +1,73 @@
-name: build-and-push-multiarch-to-dockerhub
+name: build-and-push-multiarch
 
 on:
-  push:
-    branches: [ main ]
   workflow_dispatch:
+    inputs:
+      slp_commit:
+        description: 'Upstream commit SHA to build (default: master)'
+        required: false
+        type: string
+  workflow_call:
+    inputs:
+      slp_commit:
+        required: false
+        type: string
+
+permissions:
+  contents: read
+  packages: write
 
 env:
-  IMAGE_NAME: sheepgreen/slp-server-rust
-  REGISTRY: docker.io
+  DOCKERHUB_IMAGE: sheepgreen/slp-server-rust
 
 jobs:
   build:
+    runs-on: ubuntu-latest
     strategy:
+      fail-fast: false
       matrix:
         include:
-          - arch: amd64
+          - name: amd64
             platform: linux/amd64
-            rust_image: ghcr.io/rust-cross/rust-musl-cross:x86_64-musl
             target_triple: x86_64-unknown-linux-musl
-            tag_suffix: amd64
-          - arch: arm64
+            rust_musl_image: ghcr.io/rust-cross/rust-musl-cross:x86_64-musl
+            suffix: amd64
+          - name: arm64
             platform: linux/arm64
-            rust_image: ghcr.io/rust-cross/rust-musl-cross:aarch64-musl
             target_triple: aarch64-unknown-linux-musl
-            tag_suffix: arm64
-          - arch: armv7
+            rust_musl_image: ghcr.io/rust-cross/rust-musl-cross:aarch64-musl
+            suffix: arm64
+          - name: armv7
             platform: linux/arm/v7
-            rust_image: ghcr.io/rust-cross/rust-musl-cross:armv7-musleabi
             target_triple: armv7-unknown-linux-musleabi
-            tag_suffix: armv7
-          - arch: ppc64le
-            rust_image: ghcr.io/rust-cross/rust-musl-cross:powerpc64le-musl
+            rust_musl_image: ghcr.io/rust-cross/rust-musl-cross:armv7-musleabi
+            suffix: armv7
+          - name: ppc64le
+            platform: linux/ppc64le
             target_triple: powerpc64le-unknown-linux-musl
-            tag_suffix: ppc64le
-    runs-on: ubuntu-latest
-    name: Build and push for ${{ matrix.arch }}
+            rust_musl_image: ghcr.io/rust-cross/rust-musl-cross:powerpc64le-musl
+            suffix: ppc64le
+
     steps:
-      - name: Checkout repository
+      - name: Checkout
         uses: actions/checkout@v4
+
+      - name: Set derived env
+        shell: bash
+        run: |
+          set -eux
+          OWNER_LC="${GITHUB_REPOSITORY_OWNER,,}"
+          echo "OWNER_LC=$OWNER_LC" >> $GITHUB_ENV
+          if [ -n "${{ inputs.slp_commit || '' }}" ]; then
+            echo "UPSTREAM_SHA=${{ inputs.slp_commit }}" >> $GITHUB_ENV
+          fi
+          if [ -n "${UPSTREAM_SHA:-}" ]; then
+            SRC_URL="https://github.com/spacemeowx2/slp-server-rust/archive/${UPSTREAM_SHA}.tar.gz"
+          else
+            SRC_URL="https://github.com/spacemeowx2/slp-server-rust/archive/refs/heads/master.tar.gz"
+          fi
+          echo "SRC_ARCHIVE_URL=$SRC_URL" >> $GITHUB_ENV
+          echo "GHCR_IMAGE=ghcr.io/${OWNER_LC}/slp-server-rust" >> $GITHUB_ENV
 
       - name: Set up QEMU
         uses: docker/setup-qemu-action@v3
@@ -45,62 +75,70 @@ jobs:
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
 
-      - name: Log in to Docker Hub
+      - name: Login to Docker Hub
         uses: docker/login-action@v3
         with:
-          registry: ${{ env.REGISTRY }}
+          registry: docker.io
           username: ${{ secrets.DOCKERHUB_USERNAME }}
           password: ${{ secrets.DOCKERHUB_TOKEN }}
 
-      - name: Build & push (with platforms) for ${{ matrix.arch }}
-        if: ${{ matrix.platform != '' }}
-        uses: docker/build-push-action@v5
+      - name: Login to GHCR
+        uses: docker/login-action@v3
         with:
-          context: .
-          push: true
-          platforms: ${{ matrix.platform }}
-          tags: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ matrix.tag_suffix }}
-          build-args: |
-            RUST_MUSL_IMAGE=${{ matrix.rust_image }}
-            TARGET_TRIPLE=${{ matrix.target_triple }}
-          labels: |
-            org.opencontainers.image.source=https://github.com/spacemeowx2/slp-server-rust
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Build & push (without platforms) for ${{ matrix.arch }}
-        if: ${{ matrix.platform == '' }}
-        uses: docker/build-push-action@v5
+      - name: Build & push (${{ matrix.name }}) to both registries
+        uses: docker/build-push-action@v6
         with:
           context: .
+          platforms: ${{ matrix.platform }}
           push: true
-          tags: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ matrix.tag_suffix }}
+          provenance: false
           build-args: |
-            RUST_MUSL_IMAGE=${{ matrix.rust_image }}
+            RUST_MUSL_IMAGE=${{ matrix.rust_musl_image }}
             TARGET_TRIPLE=${{ matrix.target_triple }}
-          labels: |
-            org.opencontainers.image.source=https://github.com/spacemeowx2/slp-server-rust
+            SRC_ARCHIVE_URL=${{ env.SRC_ARCHIVE_URL }}
+          tags: |
+            docker.io/${{ env.DOCKERHUB_IMAGE }}:${{ matrix.suffix }}
+            ghcr.io/${{ env.OWNER_LC }}/slp-server-rust:${{ matrix.suffix }}
 
   manifest:
-    name: Create and push multi-arch manifest
-    runs-on: ubuntu-latest
     needs: build
+    runs-on: ubuntu-latest
     steps:
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
 
-      - name: Log in to Docker Hub
+      - name: Login to Docker Hub
         uses: docker/login-action@v3
         with:
-          registry: ${{ env.REGISTRY }}
+          registry: docker.io
           username: ${{ secrets.DOCKERHUB_USERNAME }}
           password: ${{ secrets.DOCKERHUB_TOKEN }}
 
-      - name: Create and push multi-arch manifest
+      - name: Login to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Create & push multi-arch manifests (Docker Hub)
+        shell: bash
         run: |
           set -eux
-          IMG=${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
-          docker buildx imagetools create --tag ${IMG}:latest \
-            ${IMG}:amd64 \
-            ${IMG}:arm64 \
-            ${IMG}:armv7 \
-            ${IMG}:ppc64le
-          docker buildx imagetools inspect ${IMG}:latest --raw
+          BASE="docker.io/${{ env.DOCKERHUB_IMAGE }}"
+          docker buildx imagetools create --tag "${BASE}:latest" \
+            "${BASE}:amd64" "${BASE}:arm64" "${BASE}:armv7" "${BASE}:ppc64le"
+          docker buildx imagetools inspect "${BASE}:latest" --raw
+
+      - name: Create & push multi-arch manifests (GHCR)
+        shell: bash
+        run: |
+          set -eux
+          BASE="ghcr.io/${{ env.OWNER_LC }}/slp-server-rust"
+          docker buildx imagetools create --tag "${BASE}:latest" \
+            "${BASE}:amd64" "${BASE}:arm64" "${BASE}:armv7" "${BASE}:ppc64le"
+          docker buildx imagetools inspect "${BASE}:latest" --raw
