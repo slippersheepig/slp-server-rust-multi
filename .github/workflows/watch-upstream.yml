@@ -1,0 +1,45 @@
+name: watch-upstream-and-build
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: 8 6 * * *
+
+permissions:
+  contents: read
+  packages: write
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    outputs:
+      sha: ${{ steps.sha.outputs.sha }}
+      cache_hit: ${{ steps.cache.outputs.cache-hit }}
+    steps:
+      - name: Get latest upstream SHA
+        id: sha
+        run: |
+          set -eux
+          SHA=$(git ls-remote https://github.com/spacemeowx2/slp-server-rust.git refs/heads/master | cut -f1)
+          echo "sha=$SHA" >> "$GITHUB_OUTPUT"
+
+      - name: Check cache for this SHA
+        id: cache
+        uses: actions/cache@v4
+        with:
+          path: .upstream-marker
+          key: upstream-sha-${{ steps.sha.outputs.sha }}
+
+      - name: Mark this SHA (so cache saves)
+        if: steps.cache.outputs.cache-hit != 'true'
+        run: |
+          mkdir -p .upstream-marker
+          echo "${{ steps.sha.outputs.sha }}" > .upstream-marker/sha
+
+  build:
+    needs: check
+    if: needs.check.outputs.cache_hit != 'true'
+    uses: ./.github/workflows/build-and-push.yml
+    secrets: inherit
+    with:
+      slp_commit: ${{ needs.check.outputs.sha }}
