@@ -43,7 +43,6 @@ jobs:
             rust_musl_image: ghcr.io/rust-cross/rust-musl-cross:armv7-musleabi
             suffix: armv7
           - name: ppc64le
-            platform: linux/ppc64le
             target_triple: powerpc64le-unknown-linux-musl
             rust_musl_image: ghcr.io/rust-cross/rust-musl-cross:powerpc64le-musl
             suffix: ppc64le
@@ -89,11 +88,27 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Build & push (${{ matrix.name }}) to both registries
-        uses: docker/build-push-action@v6
+      - name: Build & push (with platforms) for ${{ matrix.arch }}
+        if: ${{ matrix.platform != '' }}
+        uses: docker/build-push-action@v5
         with:
           context: .
           platforms: ${{ matrix.platform }}
+          push: true
+          provenance: false
+          build-args: |
+            RUST_MUSL_IMAGE=${{ matrix.rust_musl_image }}
+            TARGET_TRIPLE=${{ matrix.target_triple }}
+            SRC_ARCHIVE_URL=${{ env.SRC_ARCHIVE_URL }}
+          tags: |
+            docker.io/${{ env.DOCKERHUB_IMAGE }}:${{ matrix.suffix }}
+            ghcr.io/${{ env.OWNER_LC }}/slp-server-rust:${{ matrix.suffix }}
+
+      - name: Build & push (without platforms) for ${{ matrix.arch }}
+        if: ${{ matrix.platform == '' }}
+        uses: docker/build-push-action@v5
+        with:
+          context: .
           push: true
           provenance: false
           build-args: |
