@@ -25,7 +25,7 @@ jobs:
 
       - name: Check cache for this SHA
         id: cache
-        uses: actions/cache@v4
+        uses: actions/cache@v6
         with:
           path: .upstream-marker
           key: upstream-sha-${{ steps.sha.outputs.sha }}
