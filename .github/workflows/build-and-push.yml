@@ -12,8 +12,8 @@ on:
       slp_commit:
         required: false
         type: string
-  pull_request:
-    branches: [ "main" ]
+  push:
+    branches: ["main"]
 
 permissions:
   contents: read
