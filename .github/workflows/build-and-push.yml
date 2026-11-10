@@ -4,16 +4,14 @@ on:
   workflow_dispatch:
     inputs:
       slp_commit:
-        description: 'Upstream commit SHA to build (default: master)'
-        required: false
+        description: 'Exact upstream commit SHA to build'
+        required: true
         type: string
   workflow_call:
     inputs:
       slp_commit:
-        required: false
+        required: true
         type: string
-  push:
-    branches: ["main"]
 
 permissions:
   contents: read
@@ -129,9 +127,11 @@ jobs:
           OWNER_LC="${GITHUB_REPOSITORY_OWNER,,}"
           BASE_IMAGE="${DOCKERHUB_IMAGE:-${OWNER_LC}/slp-server-rust}"
           BASE="docker.io/${BASE_IMAGE}"
-          docker buildx imagetools create --tag "${BASE}:latest" \
+          docker buildx imagetools create \
+            --tag "${BASE}:latest" \
+            --tag "${BASE}:${{ inputs.slp_commit }}" \
             "${BASE}:amd64" "${BASE}:arm64" "${BASE}:armv7"
-          docker buildx imagetools inspect "${BASE}:latest" --raw
+          docker buildx imagetools inspect "${BASE}:${{ inputs.slp_commit }}" --raw
 
       - name: Create & push multi-arch manifests (GHCR)
         shell: bash
@@ -139,6 +139,8 @@ jobs:
           set -eux
           OWNER_LC="${GITHUB_REPOSITORY_OWNER,,}"
           BASE="${GHCR_IMAGE:-ghcr.io/${OWNER_LC}/slp-server-rust}"
-          docker buildx imagetools create --tag "${BASE}:latest" \
+          docker buildx imagetools create \
+            --tag "${BASE}:latest" \
+            --tag "${BASE}:${{ inputs.slp_commit }}" \
             "${BASE}:amd64" "${BASE}:arm64" "${BASE}:armv7"
-          docker buildx imagetools inspect "${BASE}:latest" --raw
+          docker buildx imagetools inspect "${BASE}:${{ inputs.slp_commit }}" --raw
