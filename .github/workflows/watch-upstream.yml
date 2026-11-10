@@ -24,15 +24,13 @@ jobs:
           SHA=$(git ls-remote https://github.com/spacemeowx2/slp-server-rust.git refs/heads/master | cut -f1)
           echo "sha=$SHA" >> "$GITHUB_OUTPUT"
           
-          # 2. 检查 Docker Hub / GHCR 上是否已经存在该 commit 的镜像 tag
-          # 也可以使用 docker manifest inspect 或简单的 API curl
-          SHORT_SHA=${SHA:0:7}
-          if docker manifest inspect "sheepgreen/slp-server-rust:${SHORT_SHA}" > /dev/null 2>&1; then
+          # 2. Check whether the immutable full-SHA image tag already exists.
+          if docker manifest inspect "sheepgreen/slp-server-rust:${SHA}" > /dev/null 2>&1; then
             echo "need_build=false" >> "$GITHUB_OUTPUT"
-            echo "Image for commit $SHORT_SHA already exists. Skipping."
+            echo "Image for commit $SHA already exists. Skipping."
           else
             echo "need_build=true" >> "$GITHUB_OUTPUT"
-            echo "New commit $SHORT_SHA detected. Need build."
+            echo "No image for upstream commit $SHA; building."
           fi
 
   build:
